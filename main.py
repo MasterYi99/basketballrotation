@@ -1,4 +1,3 @@
-
 import streamlit as st
 import time
 
@@ -6,35 +5,52 @@ st.set_page_config(page_title="籃球球員輪替管理系統", layout="wide")
 
 # 1. 預設球員名單
 INITIAL_ROSTER = [
-    "許哲翊 SF",
+    "溫少宇 G",   
     "田佳右 G",
-    "蔡孟霖 G",
-    "潘瑞鐶 PF",
-    "邱泓森 C",
     "洪大洋 SF",
+    "潘瑞鐶 PF",
+    "楊茜評 C",
+    "邱泓森 C",
     "郭志峯 SF",
-    "溫少宇 G",
     "魏志強 C",
     "林育緯 SF",
-    "楊茜評 C",
+    "蔡孟霖 G",
     "鍾岳甫 G",
+    "許哲翊 SF",
     "梁瑞鈞 G"
 ]
 
-# 2. 初始化 Session State
-if "game_running" not in st.session_state:
-    st.session_state.game_running = False  # 比賽是否進行中
-
-if "on_court" not in st.session_state:
-    # 預設前 5 位先發，尚未按下開賽前 in_time 為 None
-    st.session_state.on_court = {
-        name: {"total_sec": 0, "in_time": None} for name in INITIAL_ROSTER[:5]
-    }
-    st.session_state.bench = {
-        name: {"total_sec": 0, "in_time": None} for name in INITIAL_ROSTER[5:]
-    }
+# 2. 初始化 / 重置函式
+def init_game(reset_lineup=False):
+    """
+    reset_lineup: 
+      - True: 恢復成預設前5人先發
+      - False: 保持目前場上/替補陣容，僅秒數歸零
+    """
+    now = time.time()
+    st.session_state.game_running = False
     st.session_state.selected_court = None
     st.session_state.selected_bench = None
+
+    if reset_lineup or "on_court" not in st.session_state:
+        st.session_state.on_court = {
+            name: {"total_sec": 0, "in_time": None} for name in INITIAL_ROSTER[:5]
+        }
+        st.session_state.bench = {
+            name: {"total_sec": 0, "in_time": None} for name in INITIAL_ROSTER[5:]
+        }
+    else:
+        # 只歸零秒數，維持現有陣容
+        for data in st.session_state.on_court.values():
+            data["total_sec"] = 0
+            data["in_time"] = None
+        for data in st.session_state.bench.values():
+            data["total_sec"] = 0
+            data["in_time"] = None
+
+# 頁面初次載入
+if "on_court" not in st.session_state:
+    init_game(reset_lineup=True)
 
 # 工具函式：格式化時間 (分:秒)
 def format_time(seconds):
@@ -53,14 +69,12 @@ def get_current_time(player_data):
 def toggle_game():
     now = time.time()
     if st.session_state.game_running:
-        # 暫停：結算所有場上球員的時間
         for name, data in st.session_state.on_court.items():
             if data["in_time"] is not None:
                 data["total_sec"] += (now - data["in_time"])
                 data["in_time"] = None
         st.session_state.game_running = False
     else:
-        # 開始/繼續：為所有場上球員記錄起始時間
         for name, data in st.session_state.on_court.items():
             data["in_time"] = now
         st.session_state.game_running = True
@@ -85,10 +99,11 @@ def substitute(court_player, bench_player):
     st.session_state.selected_court = None
     st.session_state.selected_bench = None
 
-# 介面標題與頂部控制列
+# --- UI 介面 ---
 st.title("🏀 籃球輪替與上場時間管理")
 
-ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 1, 1])
+# 頂部控制面板
+ctrl_col1, ctrl_col2, ctrl_col3, ctrl_col4 = st.columns([2, 1, 1, 1])
 
 with ctrl_col1:
     status_icon = "🟢 進行中" if st.session_state.game_running else "🔴 暫停中"
@@ -103,7 +118,25 @@ with ctrl_col3:
     if st.button("🔄 刷新秒數", use_container_width=True):
         st.rerun()
 
-# 換人選取提示
+with ctrl_col4:
+    # 秒數重置彈窗控制
+    @st.dialog("⚠️ 重置選項確認")
+    def confirm_reset_dialog():
+        st.write("請選擇要執行的重置方式：")
+        col_a, col_b = st.columns(2)
+        with col_a:
+            if st.button("⏱️ 僅秒數歸零", use_container_width=True, help="保留目前場上/替補球員，只將時間歸零"):
+                init_game(reset_lineup=False)
+                st.rerun()
+        with col_b:
+            if st.button("🚨 全場重置", use_container_width=True, help="秒數歸零，且先發陣容恢復成預設名單"):
+                init_game(reset_lineup=True)
+                st.rerun()
+
+    if st.button("⏹️ 重置 / 歸零", use_container_width=True):
+        confirm_reset_dialog()
+
+# 選取提示
 c_sel = st.session_state.selected_court
 b_sel = st.session_state.selected_bench
 if c_sel and not b_sel:
